@@ -1,0 +1,1561 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>kaerys-studio — 100% Local Privacy Photo Enhancer &amp; 2x Upscaler</title>
+  <!-- Tailwind CSS for layout & utility styling -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'ui-sans-serif', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
+            mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', 'monospace'],
+          },
+          colors: {
+            obsidian: '#09090b',
+            surface: '#111114',
+            elevated: '#18181c',
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    /* Custom Glassmorphism, Grid Background & Precision Range Sliders */
+    :root {
+      --border-subtle: rgba(255, 255, 255, 0.08);
+      --border-hover: rgba(255, 255, 255, 0.16);
+      --accent-glow: rgba(99, 102, 241, 0.25);
+    }
+
+    body {
+      background-color: #070709;
+      color: #f4f4f5;
+      font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+      overflow-x: hidden;
+      user-select: none;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Architectural darkroom grid + ambient radial glow */
+    .studio-bg {
+      background-image: 
+        radial-gradient(circle at 50% 0%, rgba(99, 102, 241, 0.12) 0%, transparent 55%),
+        radial-gradient(circle at 85% 85%, rgba(16, 185, 129, 0.06) 0%, transparent 45%),
+        linear-gradient(to right, rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+      background-size: 100% 100%, 100% 100%, 32px 32px, 32px 32px;
+    }
+
+    /* Translucent frosted glass panels */
+    .glass-panel {
+      background: rgba(17, 17, 21, 0.72);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid var(--border-subtle);
+    }
+
+    .glass-pill {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--border-subtle);
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .glass-pill:hover {
+      background: rgba(255, 255, 255, 0.08);
+      border-color: var(--border-hover);
+    }
+
+    /* Transparency checkerboard behind canvas */
+    .checkerboard {
+      background-color: #0d0d10;
+      background-image: 
+        linear-gradient(45deg, #141418 25%, transparent 25%), 
+        linear-gradient(-45deg, #141418 25%, transparent 25%), 
+        linear-gradient(45deg, transparent 75%, #141418 75%), 
+        linear-gradient(-45deg, transparent 75%, #141418 75%);
+      background-size: 20px 20px;
+      background-position: 0 0, 0 10px, 10px -10px, -10px 0;
+    }
+
+    /* Custom Precision Sliders */
+    input[type="range"].studio-slider {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100%;
+      height: 4px;
+      background: rgba(255, 255, 255, 0.12);
+      border-radius: 999px;
+      outline: none;
+      cursor: pointer;
+    }
+
+    input[type="range"].studio-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #ffffff;
+      border: 2px solid #6366f1;
+      box-shadow: 0 0 10px rgba(99, 102, 241, 0.5);
+      cursor: grab;
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    input[type="range"].studio-slider::-webkit-slider-thumb:hover {
+      transform: scale(1.18);
+      box-shadow: 0 0 14px rgba(99, 102, 241, 0.8);
+    }
+
+    input[type="range"].studio-slider::-webkit-slider-thumb:active {
+      cursor: grabbing;
+      transform: scale(1.05);
+    }
+
+    input[type="range"].studio-slider::-moz-range-thumb {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #ffffff;
+      border: 2px solid #6366f1;
+      box-shadow: 0 0 10px rgba(99, 102, 241, 0.5);
+      cursor: grab;
+    }
+
+    /* Custom Slim Scrollbar for Controls Sidebar */
+    .custom-scroll::-webkit-scrollbar {
+      width: 5px;
+    }
+    .custom-scroll::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .custom-scroll::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 999px;
+    }
+    .custom-scroll::-webkit-scrollbar-thumb:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
+
+    /* Before/After Divider Handle Pulse */
+    @keyframes subtlePulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.25); }
+      50% { box-shadow: 0 0 0 6px rgba(255, 255, 255, 0); }
+    }
+    .split-handle-ring {
+      animation: subtlePulse 3s infinite;
+    }
+  </style>
+</head>
+<body class="studio-bg min-h-screen flex flex-col justify-between selection:bg-indigo-500/30">
+
+  <!-- TOP NAVIGATION BAR -->
+  <header class="sticky top-0 z-40 glass-panel border-x-0 border-t-0 px-4 sm:px-6 py-3">
+    <div class="max-w-[1600px] mx-auto flex flex-wrap items-center justify-between gap-3">
+      
+      <!-- Brand Identity -->
+      <div class="flex items-center gap-3">
+        <div class="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-500 via-zinc-300 to-emerald-400 p-[1px] shadow-lg shadow-indigo-500/20">
+          <div class="w-full h-full bg-zinc-950 rounded-[11px] flex items-center justify-center">
+            <svg class="w-4 h-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="12 2 2 7 12 12 22 7 12 2"/>
+              <polyline points="2 17 12 22 22 17"/>
+              <polyline points="2 12 12 17 22 12"/>
+            </svg>
+          </div>
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <span class="font-semibold tracking-tight text-sm sm:text-base text-white">kaerys-studio</span>
+            <span class="text-[10px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-white/5 text-zinc-400 border border-white/10">2X HD</span>
+          </div>
+          <p class="text-[11px] text-zinc-500 hidden sm:block">Zero-server darkroom &amp; pixel upscaler</p>
+        </div>
+      </div>
+
+      <!-- Privacy Proof Pill Button -->
+      <button id="privacyBadgeBtn" type="button" class="glass-pill rounded-full px-3.5 py-1.5 flex items-center gap-2 text-xs text-zinc-300 cursor-pointer group">
+        <span class="relative flex h-2 w-2">
+          <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+          <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+        </span>
+        <span class="font-mono font-medium text-emerald-300/95">0 KB Uploaded</span>
+        <span class="text-zinc-600">·</span>
+        <span class="text-zinc-300">Local Engine</span>
+        <span class="text-zinc-600 hidden md:inline">·</span>
+        <span class="hidden md:inline text-zinc-400">EXIF Stripped</span>
+        <svg class="w-3.5 h-3.5 text-zinc-500 group-hover:text-white transition-colors ml-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>
+        </svg>
+      </button>
+
+      <!-- Top Action Controls -->
+      <div class="flex items-center gap-2">
+        <label for="fileInputTop" class="glass-pill rounded-xl px-3 py-1.5 text-xs font-medium text-zinc-200 hover:text-white cursor-pointer flex items-center gap-1.5">
+          <svg class="w-3.5 h-3.5 text-indigo-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+          </svg>
+          <span>Open Photo</span>
+        </label>
+        <input id="fileInputTop" type="file" accept="image/png, image/jpeg, image/webp, image/avif" class="hidden" />
+
+        <button id="wipeMemoryBtn" type="button" title="Purge image buffers from browser RAM" class="hidden glass-pill rounded-xl px-3 py-1.5 text-xs font-medium text-rose-300/90 hover:text-rose-200 hover:border-rose-500/30 flex items-center gap-1.5 cursor-pointer">
+          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+          </svg>
+          <span class="hidden sm:inline">Purge RAM</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- MAIN WORKSPACE -->
+  <main class="flex-1 max-w-[1600px] w-full mx-auto p-3 sm:p-5 grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-5 items-stretch">
+    
+    <!-- LEFT/CENTER: INTERACTIVE CANVAS VIEWPORT (8 cols on lg) -->
+    <section class="lg:col-span-8 flex flex-col glass-panel rounded-2xl overflow-hidden relative min-h-[440px] sm:min-h-[580px]">
+      
+      <!-- Viewport Top Toolbar -->
+      <div id="viewportToolbar" class="hidden flex-wrap items-center justify-between gap-2 px-4 py-2.5 border-b border-white/[0.06] bg-black/20 text-xs">
+        <div class="flex items-center gap-2 font-mono text-[11px] text-zinc-400">
+          <span id="imageDimensionsBadge" class="px-2.5 py-0.5 rounded-md bg-white/[0.04] border border-white/[0.07] text-zinc-200">0 × 0 px → 0 × 0 px</span>
+          <span id="processingTimeBadge" class="hidden sm:inline-block px-2 py-0.5 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-emerald-300">0.0 ms</span>
+        </div>
+
+        <!-- Comparison & Zoom Controls -->
+        <div class="flex items-center gap-1.5">
+          <button id="toggleSplitBtn" type="button" class="px-2.5 py-1 rounded-lg bg-indigo-500/20 border border-indigo-500/30 text-indigo-200 font-medium text-[11px] hover:bg-indigo-500/30 transition cursor-pointer">
+            Split View: ON
+          </button>
+          <button id="holdOriginalBtn" type="button" title="Press and hold to inspect original" class="px-2.5 py-1 rounded-lg bg-white/[0.04] border border-white/[0.08] text-zinc-300 hover:text-white text-[11px] transition cursor-pointer">
+            Hold Original
+          </button>
+          <div class="h-4 w-[1px] bg-white/10 mx-1"></div>
+          <button id="zoomOutBtn" type="button" class="p-1 rounded-lg hover:bg-white/10 text-zinc-400 hover:text-white cursor-pointer" title="Zoom Out">
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+          </button>
+          <span id="zoomLevelLabel" class="font-mono text-[11px] text-zinc-400 w-10 text-center">Fit</span>
+          <button id="zoomInBtn" type="button" class="p-1 rounded-lg hover:bg-white/10 text-zinc-400 hover:text-white cursor-pointer" title="Zoom In">
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+          </button>
+          <button id="zoomFitBtn" type="button" class="px-2 py-0.5 rounded-md bg-white/[0.04] hover:bg-white/[0.08] text-[10px] font-mono text-zinc-300 cursor-pointer">
+            FIT
+          </button>
+        </div>
+      </div>
+
+      <!-- Empty State / Drag & Drop Zone -->
+      <div id="dropZone" class="flex-1 flex flex-col items-center justify-center p-6 sm:p-10 text-center transition-all duration-200 cursor-pointer relative group">
+        <div class="max-w-md w-full rounded-2xl border border-dashed border-white/15 group-hover:border-indigo-400/50 bg-white/[0.015] group-hover:bg-indigo-500/[0.03] p-8 sm:p-10 transition-all">
+          <div class="w-14 h-14 mx-auto mb-5 rounded-2xl bg-gradient-to-b from-white/10 to-white/[0.02] border border-white/10 flex items-center justify-center shadow-inner">
+            <svg class="w-6 h-6 text-indigo-400 group-hover:scale-110 transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <rect x="3" y="3" width="18" height="18" rx="3" ry="3"/>
+              <circle cx="8.5" cy="8.5" r="1.5"/>
+              <polyline points="21 15 16 10 5 21"/>
+            </svg>
+          </div>
+          <h1 class="text-lg sm:text-xl font-semibold text-white tracking-tight mb-2">Drop a photo into kaerys-studio</h1>
+          <p class="text-xs sm:text-sm text-zinc-400 leading-relaxed mb-6">
+            Upscale low-res pixels to 2x HD, denoise, and grade tone locally in browser RAM. Zero server uploads.
+          </p>
+
+          <div class="flex flex-col sm:flex-row items-center justify-center gap-2.5">
+            <label for="fileInputMain" class="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium shadow-lg shadow-indigo-600/25 transition cursor-pointer">
+              Select Image File
+            </label>
+            <input id="fileInputMain" type="file" accept="image/png, image/jpeg, image/webp, image/avif" class="hidden" />
+
+            <button id="loadSampleBtn" type="button" class="w-full sm:w-auto px-4 py-2.5 rounded-xl glass-pill text-zinc-200 hover:text-white text-xs font-medium cursor-pointer flex items-center justify-center gap-1.5">
+              <svg class="w-3.5 h-3.5 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="5 3 19 12 5 21 5 3"/>
+              </svg>
+              <span>Try Sample Image</span>
+            </button>
+          </div>
+
+          <div class="mt-6 pt-4 border-t border-white/[0.06] flex items-center justify-center gap-4 text-[11px] font-mono text-zinc-500">
+            <span>2X HD UPSCALE</span>
+            <span>·</span>
+            <span>DENOISE</span>
+            <span>·</span>
+            <span>EXIF WIPE</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Active Canvas Stage with Split Before/After Comparison -->
+      <div id="canvasStage" class="hidden flex-1 checkerboard relative overflow-auto items-center justify-center p-4 sm:p-6">
+        <div id="comparisonWrapper" class="relative inline-block shadow-2xl shadow-black/80 rounded-lg overflow-hidden select-none" style="touch-action: none;">
+          
+          <!-- Enhanced Canvas (Bottom Layer) -->
+          <canvas id="enhancedCanvas" class="block max-w-full max-h-[68vh] object-contain"></canvas>
+
+          <!-- Original Canvas (Top Clipped Layer for Before/After) -->
+          <div id="originalClipLayer" class="absolute inset-0 overflow-hidden pointer-events-none" style="clip-path: inset(0 50% 0 0);">
+            <canvas id="originalCanvas" class="block w-full h-full object-contain"></canvas>
+            <span class="absolute top-3 left-3 px-2 py-0.5 rounded-md bg-black/65 backdrop-blur-md border border-white/15 text-[10px] font-mono uppercase tracking-wider text-zinc-300">
+              Original
+            </span>
+          </div>
+
+          <!-- Enhanced Label Badge -->
+          <span id="enhancedBadgeLabel" class="absolute top-3 right-3 px-2 py-0.5 rounded-md bg-indigo-950/75 backdrop-blur-md border border-indigo-400/25 text-[10px] font-mono uppercase tracking-wider text-indigo-200 pointer-events-none">
+            Enhanced
+          </span>
+
+          <!-- Interactive Draggable Split Slider Line -->
+          <div id="splitDivider" class="absolute top-0 bottom-0 w-[2px] bg-white/90 shadow-[0_0_12px_rgba(0,0,0,0.8)] cursor-ew-resize z-20" style="left: 50%;">
+            <div class="split-handle-ring absolute top-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-zinc-950/90 border border-white/80 backdrop-blur-md flex items-center justify-center shadow-xl">
+              <svg class="w-4 h-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="15 18 9 12 15 6" transform="translate(-3, 0)"/>
+                <polyline points="9 18 15 12 9 6" transform="translate(3, 0)"/>
+              </svg>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Subtle Drag Over Overlay -->
+      <div id="dragOverlay" class="hidden absolute inset-0 bg-indigo-950/70 backdrop-blur-sm border-2 border-indigo-400 rounded-2xl z-30 flex items-center justify-center pointer-events-none">
+        <div class="px-6 py-4 rounded-2xl bg-zinc-950/90 border border-indigo-400/40 text-center shadow-2xl">
+          <p class="text-sm font-semibold text-white">Release to load locally</p>
+          <p class="text-xs text-indigo-300 mt-1">Zero network transmission</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- RIGHT SIDEBAR: STUDIO CONTROLS & EXPORT (4 cols on lg) -->
+    <aside class="lg:col-span-4 flex flex-col glass-panel rounded-2xl overflow-hidden max-h-[820px]">
+      
+      <!-- Sidebar Header -->
+      <div class="px-4 py-3 border-b border-white/[0.06] flex items-center justify-between bg-black/20">
+        <div class="flex items-center gap-2">
+          <span class="text-xs font-semibold uppercase tracking-wider text-zinc-300">Studio Adjustments</span>
+        </div>
+        <button id="resetAllBtn" type="button" class="text-[11px] font-mono text-zinc-400 hover:text-white px-2 py-1 rounded-md hover:bg-white/5 transition cursor-pointer">
+          Reset All
+        </button>
+      </div>
+
+      <!-- Scrollable Adjustments Body -->
+      <div class="flex-1 overflow-y-auto custom-scroll p-4 space-y-5">
+
+        <!-- 0. Resolution Upscaler (Low-to-High Pixel Engine) -->
+        <div class="p-3 rounded-xl bg-indigo-500/[0.05] border border-indigo-500/20 space-y-2.5">
+          <div class="flex items-center justify-between">
+            <span class="text-[11px] font-semibold uppercase tracking-wider text-indigo-300 flex items-center gap-1.5">
+              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/>
+              </svg>
+              <span>Upscale Resolution</span>
+            </span>
+            <span id="upscaleStatusBadge" class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-white/5 text-zinc-400">1x Native</span>
+          </div>
+
+          <div class="grid grid-cols-2 gap-1.5 p-1 rounded-xl bg-black/40 border border-white/[0.07]">
+            <button type="button" data-scale="1" class="upscale-btn py-1.5 px-2.5 rounded-lg bg-white/10 text-white text-xs font-medium transition cursor-pointer">
+              1x Original
+            </button>
+            <button type="button" data-scale="2" class="upscale-btn py-1.5 px-2.5 rounded-lg text-zinc-400 hover:text-white text-xs font-medium transition cursor-pointer flex items-center justify-center gap-1">
+              <span>2x HD Upscale</span>
+              <span class="text-[9px] font-mono px-1 rounded bg-indigo-500/30 text-indigo-200">EDGE+</span>
+            </button>
+          </div>
+          <p class="text-[10px] text-zinc-400 leading-snug">
+            Multi-step bicubic interpolation + edge-directed micro-contrast restoration for crisp enlargement.
+          </p>
+        </div>
+
+        <!-- 1. One-Click Smart Presets -->
+        <div>
+          <div class="flex items-center justify-between mb-2.5">
+            <span class="text-[11px] font-medium uppercase tracking-wider text-zinc-400">Quick Presets</span>
+            <span id="activePresetLabel" class="text-[10px] font-mono text-indigo-400">Custom</span>
+          </div>
+          <div class="grid grid-cols-2 gap-2">
+            <button type="button" data-preset="auto" class="preset-btn glass-pill rounded-xl px-3 py-2 text-left flex items-center gap-2 cursor-pointer group">
+              <span class="w-2 h-2 rounded-full bg-indigo-400 group-hover:scale-125 transition-transform"></span>
+              <span class="text-xs font-medium text-zinc-200">Auto Enhance</span>
+            </button>
+            <button type="button" data-preset="crispUpscale" class="preset-btn glass-pill rounded-xl px-3 py-2 text-left flex items-center gap-2 cursor-pointer group">
+              <span class="w-2 h-2 rounded-full bg-cyan-400 group-hover:scale-125 transition-transform"></span>
+              <span class="text-xs font-medium text-zinc-200">Crisp Upscale</span>
+            </button>
+            <button type="button" data-preset="vivid" class="preset-btn glass-pill rounded-xl px-3 py-2 text-left flex items-center gap-2 cursor-pointer group">
+              <span class="w-2 h-2 rounded-full bg-emerald-400 group-hover:scale-125 transition-transform"></span>
+              <span class="text-xs font-medium text-zinc-200">Vivid Pop</span>
+            </button>
+            <button type="button" data-preset="matte" class="preset-btn glass-pill rounded-xl px-3 py-2 text-left flex items-center gap-2 cursor-pointer group">
+              <span class="w-2 h-2 rounded-full bg-amber-400 group-hover:scale-125 transition-transform"></span>
+              <span class="text-xs font-medium text-zinc-200">Matte Film</span>
+            </button>
+            <button type="button" data-preset="noir" class="preset-btn glass-pill rounded-xl px-3 py-2 text-left flex items-center gap-2 cursor-pointer group col-span-2">
+              <span class="w-2 h-2 rounded-full bg-zinc-300 group-hover:scale-125 transition-transform"></span>
+              <span class="text-xs font-medium text-zinc-200">B&amp;W Noir</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="h-[1px] bg-white/[0.06]"></div>
+
+        <!-- 2. Light & Tone Controls -->
+        <div class="space-y-3.5">
+          <div class="flex items-center justify-between">
+            <span class="text-[11px] font-medium uppercase tracking-wider text-zinc-400">Light &amp; Tone</span>
+            <span class="text-[10px] text-zinc-600">Double-click label to reset</span>
+          </div>
+
+          <!-- Exposure -->
+          <div class="slider-group" data-key="exposure">
+            <div class="flex justify-between text-xs mb-1.5">
+              <label class="text-zinc-300 cursor-pointer hover:text-white">Exposure</label>
+              <span class="font-mono text-[11px] text-zinc-400 value-display">0</span>
+            </div>
+            <input type="range" class="studio-slider" min="-100" max="100" value="0" data-param="exposure">
+          </div>
+
+          <!-- Contrast -->
+          <div class="slider-group" data-key="contrast">
+            <div class="flex justify-between text-xs mb-1.5">
+              <label class="text-zinc-300 cursor-pointer hover:text-white">Contrast</label>
+              <span class="font-mono text-[11px] text-zinc-400 value-display">0</span>
+            </div>
+            <input type="range" class="studio-slider" min="-100" max="100" value="0" data-param="contrast">
+          </div>
+
+          <!-- Highlights / Shadows Recovery -->
+          <div class="slider-group" data-key="shadows">
+            <div class="flex justify-between text-xs mb-1.5">
+              <label class="text-zinc-300 cursor-pointer hover:text-white">Highlights / Shadows</label>
+              <span class="font-mono text-[11px] text-zinc-400 value-display">0</span>
+            </div>
+            <input type="range" class="studio-slider" min="-100" max="100" value="0" data-param="shadows">
+          </div>
+
+          <!-- Warmth -->
+          <div class="slider-group" data-key="warmth">
+            <div class="flex justify-between text-xs mb-1.5">
+              <label class="text-zinc-300 cursor-pointer hover:text-white">Warmth</label>
+              <span class="font-mono text-[11px] text-zinc-400 value-display">0</span>
+            </div>
+            <input type="range" class="studio-slider" min="-100" max="100" value="0" data-param="warmth">
+          </div>
+        </div>
+
+        <div class="h-[1px] bg-white/[0.06]"></div>
+
+        <!-- 3. Color, Denoise & Optical Reconstruction -->
+        <div class="space-y-3.5">
+          <span class="text-[11px] font-medium uppercase tracking-wider text-zinc-400 block">Color &amp; Pixel Reconstruction</span>
+
+          <!-- Vibrance -->
+          <div class="slider-group" data-key="vibrance">
+            <div class="flex justify-between text-xs mb-1.5">
+              <label class="text-zinc-300 cursor-pointer hover:text-white">Vibrance</label>
+              <span class="font-mono text-[11px] text-zinc-400 value-display">0</span>
+            </div>
+            <input type="range" class="studio-slider" min="-100" max="100" value="0" data-param="vibrance">
+          </div>
+
+          <!-- Saturation -->
+          <div class="slider-group" data-key="saturation">
+            <div class="flex justify-between text-xs mb-1.5">
+              <label class="text-zinc-300 cursor-pointer hover:text-white">Saturation</label>
+              <span class="font-mono text-[11px] text-zinc-400 value-display">0</span>
+            </div>
+            <input type="range" class="studio-slider" min="-100" max="100" value="0" data-param="saturation">
+          </div>
+
+          <!-- Denoise (Edge-Preserving Bilateral Smoothing) -->
+          <div class="slider-group" data-key="denoise">
+            <div class="flex justify-between text-xs mb-1.5">
+              <label class="text-zinc-300 cursor-pointer hover:text-white flex items-center gap-1.5">
+                <span>Denoise (Edge-Safe)</span>
+                <span class="text-[9px] font-mono px-1 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/20">BILATERAL</span>
+              </label>
+              <span class="font-mono text-[11px] text-zinc-400 value-display">0</span>
+            </div>
+            <input type="range" class="studio-slider" min="0" max="100" value="0" data-param="denoise">
+          </div>
+
+          <!-- Sharpness (3x3 Convolution Kernel) -->
+          <div class="slider-group" data-key="sharpen">
+            <div class="flex justify-between text-xs mb-1.5">
+              <label class="text-zinc-300 cursor-pointer hover:text-white flex items-center gap-1.5">
+                <span>Sharpness &amp; Clarity</span>
+                <span class="text-[9px] font-mono px-1 rounded bg-indigo-500/15 text-indigo-300 border border-indigo-500/20">3×3 KERNEL</span>
+              </label>
+              <span class="font-mono text-[11px] text-zinc-400 value-display">0</span>
+            </div>
+            <input type="range" class="studio-slider" min="0" max="100" value="0" data-param="sharpen">
+          </div>
+        </div>
+      </div>
+
+      <!-- EXPORT FOOTER PANEL -->
+      <div class="p-4 border-t border-white/[0.08] bg-zinc-950/60 space-y-3">
+        <div class="flex items-center justify-between gap-2">
+          <!-- Format Selector -->
+          <div class="flex rounded-xl bg-white/[0.04] p-0.5 border border-white/[0.08] text-[11px] font-mono">
+            <button type="button" data-format="image/png" class="format-btn px-2.5 py-1 rounded-lg text-zinc-400 hover:text-white cursor-pointer transition">PNG</button>
+            <button type="button" data-format="image/webp" class="format-btn px-2.5 py-1 rounded-lg text-zinc-400 hover:text-white cursor-pointer transition">WEBP</button>
+            <button type="button" data-format="image/jpeg" class="format-btn px-2.5 py-1 rounded-lg bg-white/10 text-white font-medium cursor-pointer transition">JPEG</button>
+          </div>
+          <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-2 gap-2">
+            <button type="button" data-preset="auto" class="preset-btn glass-pill rounded-xl px-3 py-2 text-left flex items-center gap-2 cursor-pointer group">
+              <span class="w-2 h-2 rounded-full bg-indigo-400 group-hover:scale-125 transition-transform"></span>
+              <span class="text-xs font-medium text-zinc-200">Auto Enhance</span>
+            </button>
+            <button type="button" data-preset="portrait" class="preset-btn glass-pill rounded-xl px-3 py-2 text-left flex items-center gap-2 cursor-pointer group">
+              <span class="w-2 h-2 rounded-full bg-rose-400 group-hover:scale-125 transition-transform"></span>
+              <span class="text-xs font-medium text-zinc-200">Crisp Portrait</span>
+            </button>
+            <button type="button" data-preset="landscape" class="preset-btn glass-pill rounded-xl px-3 py-2 text-left flex items-center gap-2 cursor-pointer group">
+              <span class="w-2 h-2 rounded-full bg-emerald-400 group-hover:scale-125 transition-transform"></span>
+              <span class="text-xs font-medium text-zinc-200">Vivid Scenery</span>
+            </button>
+            <button type="button" data-preset="matte" class="preset-btn glass-pill rounded-xl px-3 py-2 text-left flex items-center gap-2 cursor-pointer group">
+              <span class="w-2 h-2 rounded-full bg-amber-400 group-hover:scale-125 transition-transform"></span>
+              <span class="text-xs font-medium text-zinc-200">Matte Film</span>
+            </button>
+            <button type="button" data-preset="noir" class="preset-btn glass-pill rounded-xl px-3 py-2 text-left flex items-center gap-2 cursor-pointer group col-span-2 sm:col-span-1 lg:col-span-2">
+              <span class="w-2 h-2 rounded-full bg-zinc-300 group-hover:scale-125 transition-transform"></span>
+              <span class="text-xs font-medium text-zinc-200">Noir Monochrome</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="h-[1px] bg-white/[0.06]"></div>
+
+        <!-- 2. Light & Tone Controls -->
+        <div class="space-y-3.5">
+          <div class="flex items-center justify-between">
+            <span class="text-[11px] font-medium uppercase tracking-wider text-zinc-400">Light &amp; Tone</span>
+            <span class="text-[10px] text-zinc-600">Double-click label to reset</span>
+          </div>
+
+          <!-- Exposure -->
+          <div class="slider-group" data-key="exposure">
+            <div class="flex justify-between text-xs mb-1.5">
+              <label class="text-zinc-300 cursor-pointer hover:text-white">Exposure</label>
+              <span class="font-mono text-[11px] text-zinc-400 value-display">0</span>
+            </div>
+            <input type="range" class="studio-slider" min="-100" max="100" value="0" data-param="exposure">
+          </div>
+
+          <!-- Contrast -->
+          <div class="slider-group" data-key="contrast">
+            <div class="flex justify-between text-xs mb-1.5">
+              <label class="text-zinc-300 cursor-pointer hover:text-white">Contrast</label>
+              <span class="font-mono text-[11px] text-zinc-400 value-display">0</span>
+            </div>
+            <input type="range" class="studio-slider" min="-100" max="100" value="0" data-param="contrast">
+          </div>
+
+          <!-- Highlights / Shadows Recovery -->
+          <div class="slider-group" data-key="shadows">
+            <div class="flex justify-between text-xs mb-1.5">
+              <label class="text-zinc-300 cursor-pointer hover:text-white">Shadow Lift</label>
+              <span class="font-mono text-[11px] text-zinc-400 value-display">0</span>
+            </div>
+            <input type="range" class="studio-slider" min="-100" max="100" value="0" data-param="shadows">
+          </div>
+
+          <!-- Warmth -->
+          <div class="slider-group" data-key="warmth">
+            <div class="flex justify-between text-xs mb-1.5">
+              <label class="text-zinc-300 cursor-pointer hover:text-white">Warmth (Temp)</label>
+              <span class="font-mono text-[11px] text-zinc-400 value-display">0</span>
+            </div>
+            <input type="range" class="studio-slider" min="-100" max="100" value="0" data-param="warmth">
+          </div>
+        </div>
+
+        <div class="h-[1px] bg-white/[0.06]"></div>
+
+        <!-- 3. Color & Optical Detail -->
+        <div class="space-y-3.5">
+          <span class="text-[11px] font-medium uppercase tracking-wider text-zinc-400 block">Color &amp; Optical Detail</span>
+
+          <!-- Vibrance -->
+          <div class="slider-group" data-key="vibrance">
+            <div class="flex justify-between text-xs mb-1.5">
+              <label class="text-zinc-300 cursor-pointer hover:text-white">Smart Vibrance</label>
+              <span class="font-mono text-[11px] text-zinc-400 value-display">0</span>
+            </div>
+            <input type="range" class="studio-slider" min="-100" max="100" value="0" data-param="vibrance">
+          </div>
+
+          <!-- Saturation -->
+          <div class="slider-group" data-key="saturation">
+            <div class="flex justify-between text-xs mb-1.5">
+              <label class="text-zinc-300 cursor-pointer hover:text-white">Saturation</label>
+              <span class="font-mono text-[11px] text-zinc-400 value-display">0</span>
+            </div>
+            <input type="range" class="studio-slider" min="-100" max="100" value="0" data-param="saturation">
+          </div>
+
+          <!-- Sharpen / Clarity (Convolution Kernel) -->
+          <div class="slider-group" data-key="sharpen">
+            <div class="flex justify-between text-xs mb-1.5">
+              <label class="text-zinc-300 cursor-pointer hover:text-white flex items-center gap-1.5">
+                <span>Clarity &amp; Sharpen</span>
+                <span class="text-[9px] font-mono px-1 rounded bg-indigo-500/15 text-indigo-300 border border-indigo-500/20">KERNEL</span>
+              </label>
+              <span class="font-mono text-[11px] text-zinc-400 value-display">0</span>
+            </div>
+            <input type="range" class="studio-slider" min="0" max="100" value="0" data-param="sharpen">
+          </div>
+
+          <!-- Vignette -->
+          <div class="slider-group" data-key="vignette">
+            <div class="flex justify-between text-xs mb-1.5">
+              <label class="text-zinc-300 cursor-pointer hover:text-white">Darkroom Vignette</label>
+              <span class="font-mono text-[11px] text-zinc-400 value-display">0</span>
+            </div>
+            <input type="range" class="studio-slider" min="0" max="100" value="0" data-param="vignette">
+          </div>
+        </div>
+      </div>
+
+      <!-- EXPORT FOOTER PANEL -->
+      <div class="p-4 border-t border-white/[0.08] bg-zinc-950/60 space-y-3">
+        <div class="flex items-center justify-between gap-2">
+          <!-- Format Selector -->
+          <div class="flex rounded-xl bg-white/[0.04] p-0.5 border border-white/[0.08] text-[11px] font-mono">
+            <button type="button" data-format="image/jpeg" class="format-btn px-2.5 py-1 rounded-lg bg-white/10 text-white font-medium cursor-pointer transition">JPEG</button>
+            <button type="button" data-format="image/webp" class="format-btn px-2.5 py-1 rounded-lg text-zinc-400 hover:text-white cursor-pointer transition">WEBP</button>
+            <button type="button" data-format="image/png" class="format-btn px-2.5 py-1 rounded-lg text-zinc-400 hover:text-white cursor-pointer transition">PNG</button>
+          </div>
+
+          <!-- Estimated Size Readout -->
+          <div class="text-right font-mono text-[11px]">
+            <span class="text-zinc-500">Est: </span>
+            <span id="estFileSize" class="text-zinc-300">—</span>
+          </div>
+        </div>
+
+        <!-- Quality Slider (hidden for lossless PNG) -->
+        <div id="qualityControlRow" class="flex items-center gap-3">
+          <span class="text-[11px] text-zinc-400 whitespace-nowrap">Quality</span>
+          <input id="exportQualitySlider" type="range" class="studio-slider" min="50" max="100" value="92">
+          <span id="exportQualityLabel" class="font-mono text-[11px] text-zinc-300 w-9 text-right">92%</span>
+        </div>
+
+        <!-- Primary Download CTA -->
+        <button id="downloadBtn" type="button" disabled class="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 disabled:from-zinc-800 disabled:to-zinc-800 disabled:text-zinc-500 disabled:cursor-not-allowed text-white font-medium text-xs shadow-lg shadow-indigo-600/20 transition flex items-center justify-center gap-2 cursor-pointer">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+          <span>Export Clean Photo (EXIF Stripped)</span>
+        </button>
+      </div>
+
+    </aside>
+  </main>
+
+  <!-- PRIVACY ARCHITECTURE PROOF MODAL -->
+  <div id="privacyModal" class="hidden fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-center justify-center p-4">
+    <div class="glass-panel max-w-lg w-full rounded-2xl p-6 border border-white/15 shadow-2xl relative animate-[fadeIn_0.15s_ease-out]">
+      <div class="flex items-start justify-between mb-4">
+        <div class="flex items-center gap-2.5">
+          <div class="w-9 h-9 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+            <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            </svg>
+          </div>
+          <div>
+            <h2 class="text-base font-semibold text-white">Zero-Trust Local Architecture</h2>
+            <p class="text-xs text-zinc-400">Verifiable client-side privacy guarantees</p>
+          </div>
+        </div>
+        <button id="closePrivacyModal" type="button" class="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-white/10 cursor-pointer">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <div class="space-y-3 text-xs text-zinc-300 leading-relaxed">
+        <div class="p-3 rounded-xl bg-white/[0.03] border border-white/[0.07] flex items-start gap-3">
+          <span class="font-mono text-emerald-400 font-semibold mt-0.5">01</span>
+          <div>
+            <p class="font-medium text-white">Zero Server Uploads</p>
+            <p class="text-zinc-400 mt-0.5">Files are read via browser <code class="text-indigo-300">FileReader</code> &amp; HTML5 Canvas <code class="text-indigo-300">ImageData</code>. You can disconnect Wi-Fi right now and continue editing.</p>
+          </div>
+        </div>
+
+        <div class="p-3 rounded-xl bg-white/[0.03] border border-white/[0.07] flex items-start gap-3">
+          <span class="font-mono text-emerald-400 font-semibold mt-0.5">02</span>
+          <div>
+            <p class="font-medium text-white">Automatic EXIF &amp; GPS Stripping</p>
+            <p class="text-zinc-400 mt-0.5">Exporting re-encodes raw RGBA pixel buffers onto a fresh canvas via <code class="text-indigo-300">canvas.toBlob()</code>, permanently discarding GPS coordinates, device serials, and timestamps.</p>
+          </div>
+        </div>
+
+        <div class="p-3 rounded-xl bg-white/[0.03] border border-white/[0.07] flex items-start gap-3">
+          <span class="font-mono text-emerald-400 font-semibold mt-0.5">03</span>
+          <div>
+            <p class="font-medium text-white">Live Session Telemetry</p>
+            <div class="mt-1.5 grid grid-cols-2 gap-2 font-mono text-[11px]">
+              <div class="px-2.5 py-1.5 rounded-lg bg-black/40 border border-white/5">
+                <span class="text-zinc-500 block">Network Payload</span>
+                <span class="text-emerald-400 font-semibold">0 KB Uploaded</span>
+              </div>
+              <div class="px-2.5 py-1.5 rounded-lg bg-black/40 border border-white/5">
+                <span class="text-zinc-500 block">Processing Engine</span>
+                <span class="text-indigo-300 font-semibold">kaerys Local DSP</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="mt-5 flex justify-end">
+        <button id="ackPrivacyModal" type="button" class="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-xs font-medium text-white transition cursor-pointer">
+          Got it
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOAST NOTIFICATION -->
+  <div id="toastNotification" class="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 pointer-events-none opacity-0 transition-all duration-300 translate-y-2">
+    <div class="px-4 py-2 rounded-full bg-zinc-900/95 border border-white/15 shadow-2xl backdrop-blur-md flex items-center gap-2 text-xs text-zinc-200">
+      <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+      <span id="toastMessage">Memory wiped clean</span>
+    </div>
+  </div>
+
+  <!-- STUDIO ENGINE SCRIPT -->
+  <script>
+    (() => {
+      // ==========================================
+      // 1. STATE & DEFAULT PARAMETERS
+      // ==========================================
+      const DEFAULT_PARAMS = {
+        exposure: 0,    // -100 to 100
+        contrast: 0,    // -100 to 100
+        shadows: 0,     // -100 to 100
+        warmth: 0,      // -100 to 100
+        vibrance: 0,    // -100 to 100
+        saturation: 0,  // -100 to 100
+        denoise: 0,     // 0 to 100
+        sharpen: 0      // 0 to 100
+      };
+
+      const PRESETS = {
+        auto: { exposure: 8, contrast: 16, shadows: 22, warmth: 4, vibrance: 24, saturation: 6, denoise: 12, sharpen: 24 },
+        crispUpscale: { exposure: 4, contrast: 18, shadows: 14, warmth: 2, vibrance: 16, saturation: 4, denoise: 28, sharpen: 48 },
+        vivid: { exposure: 6, contrast: 22, shadows: 18, warmth: 8, vibrance: 38, saturation: 16, denoise: 10, sharpen: 28 },
+        matte: { exposure: 6, contrast: -14, shadows: 34, warmth: 14, vibrance: -10, saturation: -16, denoise: 15, sharpen: 12 },
+        noir: { exposure: 6, contrast: 38, shadows: 10, warmth: 0, vibrance: 0, saturation: -100, denoise: 15, sharpen: 36 }
+      };
+
+      const state = {
+        params: { ...DEFAULT_PARAMS },
+        upscaleFactor: 1, // 1 = 1x Original, 2 = 2x HD Upscale
+        hasImage: false,
+        fileName: 'kaerys-enhanced',
+        fullWidth: 0,
+        fullHeight: 0,
+        // Offscreen full-resolution buffers for lossless export
+        sourceFullCanvas: document.createElement('canvas'),
+        // Preview proxy buffers (capped for 60fps real-time slider responsiveness)
+        previewOriginalData: null,
+        previewWidth: 0,
+        previewHeight: 0,
+        splitView: true,
+        splitPercent: 50,
+        zoomScale: 1,
+        isFitMode: true,
+        exportFormat: 'image/jpeg',
+        exportQuality: 0.92,
+        renderPending: false
+      };
+
+      // ==========================================
+      // 2. DOM ELEMENTS
+      // ==========================================
+      const els = {
+        dropZone: document.getElementById('dropZone'),
+        dragOverlay: document.getElementById('dragOverlay'),
+        canvasStage: document.getElementById('canvasStage'),
+        viewportToolbar: document.getElementById('viewportToolbar'),
+        comparisonWrapper: document.getElementById('comparisonWrapper'),
+        enhancedCanvas: document.getElementById('enhancedCanvas'),
+        originalCanvas: document.getElementById('originalCanvas'),
+        originalClipLayer: document.getElementById('originalClipLayer'),
+        enhancedBadgeLabel: document.getElementById('enhancedBadgeLabel'),
+        splitDivider: document.getElementById('splitDivider'),
+        toggleSplitBtn: document.getElementById('toggleSplitBtn'),
+        holdOriginalBtn: document.getElementById('holdOriginalBtn'),
+        imageDimensionsBadge: document.getElementById('imageDimensionsBadge'),
+        processingTimeBadge: document.getElementById('processingTimeBadge'),
+        upscaleStatusBadge: document.getElementById('upscaleStatusBadge'),
+        zoomOutBtn: document.getElementById('zoomOutBtn'),
+        zoomInBtn: document.getElementById('zoomInBtn'),
+        zoomFitBtn: document.getElementById('zoomFitBtn'),
+        zoomLevelLabel: document.getElementById('zoomLevelLabel'),
+        fileInputTop: document.getElementById('fileInputTop'),
+        fileInputMain: document.getElementById('fileInputMain'),
+        loadSampleBtn: document.getElementById('loadSampleBtn'),
+        wipeMemoryBtn: document.getElementById('wipeMemoryBtn'),
+        resetAllBtn: document.getElementById('resetAllBtn'),
+        activePresetLabel: document.getElementById('activePresetLabel'),
+        downloadBtn: document.getElementById('downloadBtn'),
+        estFileSize: document.getElementById('estFileSize'),
+        exportQualitySlider: document.getElementById('exportQualitySlider'),
+        exportQualityLabel: document.getElementById('exportQualityLabel'),
+        qualityControlRow: document.getElementById('qualityControlRow'),
+        privacyBadgeBtn: document.getElementById('privacyBadgeBtn'),
+        privacyModal: document.getElementById('privacyModal'),
+        closePrivacyModal: document.getElementById('closePrivacyModal'),
+        ackPrivacyModal: document.getElementById('ackPrivacyModal'),
+        toastNotification: document.getElementById('toastNotification'),
+        toastMessage: document.getElementById('toastMessage')
+      };
+
+      const enhancedCtx = els.enhancedCanvas.getContext('2d', { willReadFrequently: true });
+      const originalCtx = els.originalCanvas.getContext('2d', { willReadFrequently: true });
+
+      // ==========================================
+      // 3. UTILITY & TOAST FEEDBACK
+      // ==========================================
+      let toastTimeout;
+      function showToast(msg) {
+        els.toastMessage.textContent = msg;
+        els.toastNotification.classList.remove('opacity-0', 'translate-y-2');
+        els.toastNotification.classList.add('opacity-100', 'translate-y-0');
+        clearTimeout(toastTimeout);
+        toastTimeout = setTimeout(() => {
+          els.toastNotification.classList.remove('opacity-100', 'translate-y-0');
+          els.toastNotification.classList.add('opacity-0', 'translate-y-2');
+        }, 2600);
+      }
+
+      function formatBytes(bytes) {
+        if (!bytes || bytes <= 0) return '—';
+        const kb = bytes / 1024;
+        return kb > 1024 ? `${(kb / 1024).toFixed(2)} MB` : `${Math.round(kb)} KB`;
+      }
+
+      function updateDimensionReadout() {
+        if (!state.hasImage) return;
+        const outW = state.fullWidth * state.upscaleFactor;
+        const outH = state.fullHeight * state.upscaleFactor;
+        els.imageDimensionsBadge.textContent = `${state.fullWidth} × ${state.fullHeight} px → ${outW} × ${outH} px`;
+        els.upscaleStatusBadge.textContent = state.upscaleFactor === 2 ? '2x HD Active' : '1x Native';
+        els.enhancedBadgeLabel.textContent = state.upscaleFactor === 2 ? 'Enhanced · 2x HD' : 'Enhanced';
+      }
+
+      // ==========================================
+      // 4. MULTI-STEP INTERPOLATION & BUFFER BUILDER
+      // ==========================================
+      function buildUpscaledCanvas(sourceCanvas, targetW, targetH) {
+        // Multi-step progressive scaling avoids bilinear ringing and preserves crisp edges
+        let currentCanvas = sourceCanvas;
+        let curW = sourceCanvas.width;
+        let curH = sourceCanvas.height;
+
+        while (curW * 1.5 < targetW) {
+          const nextW = Math.round(curW * 1.5);
+          const nextH = Math.round(curH * 1.5);
+          const stepCanvas = document.createElement('canvas');
+          stepCanvas.width = nextW;
+          stepCanvas.height = nextH;
+          const stepCtx = stepCanvas.getContext('2d');
+          stepCtx.imageSmoothingEnabled = true;
+          stepCtx.imageSmoothingQuality = 'high';
+          stepCtx.drawImage(currentCanvas, 0, 0, nextW, nextH);
+          currentCanvas = stepCanvas;
+          curW = nextW;
+          curH = nextH;
+        }
+
+        const finalCanvas = document.createElement('canvas');
+        finalCanvas.width = targetW;
+        finalCanvas.height = targetH;
+        const finalCtx = finalCanvas.getContext('2d');
+        finalCtx.imageSmoothingEnabled = true;
+        finalCtx.imageSmoothingQuality = 'high';
+        finalCtx.drawImage(currentCanvas, 0, 0, targetW, targetH);
+        return finalCanvas;
+      }
+
+      function rebuildPreviewBuffers() {
+        if (!state.hasImage) return;
+        const w = state.fullWidth;
+        const h = state.fullHeight;
+        const scale = state.upscaleFactor;
+
+        // Cap preview proxy max side so real-time sliders stay fluid even on 4K images
+        const MAX_PREVIEW_DIM = scale === 2 ? 1680 : 1300;
+        let pw = w * scale;
+        let ph = h * scale;
+        if (Math.max(pw, ph) > MAX_PREVIEW_DIM) {
+          const ratio = MAX_PREVIEW_DIM / Math.max(pw, ph);
+          pw = Math.round(pw * ratio);
+          ph = Math.round(ph * ratio);
+        }
+
+        state.previewWidth = pw;
+        state.previewHeight = ph;
+
+        els.originalCanvas.width = pw;
+        els.originalCanvas.height = ph;
+        els.enhancedCanvas.width = pw;
+        els.enhancedCanvas.height = ph;
+
+        // Original comparison side uses standard draw so user sees raw pixel enlargement vs reconstructed 2x HD
+        originalCtx.imageSmoothingEnabled = true;
+        originalCtx.imageSmoothingQuality = 'medium';
+        originalCtx.drawImage(state.sourceFullCanvas, 0, 0, pw, ph);
+
+        // Enhanced side uses progressive high-quality interpolation buffer
+        const upscaledProxy = scale === 2
+          ? buildUpscaledCanvas(state.sourceFullCanvas, pw, ph)
+          : state.sourceFullCanvas;
+
+        const tempCtx = upscaledProxy.getContext('2d', { willReadFrequently: true });
+        state.previewOriginalData = tempCtx.getImageData(0, 0, pw, ph);
+
+        updateDimensionReadout();
+        applyZoom();
+        requestRender();
+        estimateExportSize();
+      }
+
+      function loadImageFromSource(imgElement, cleanBaseName = 'photo') {
+        const w = imgElement.naturalWidth || imgElement.width;
+        const h = imgElement.naturalHeight || imgElement.height;
+        if (!w || !h) return;
+
+        state.hasImage = true;
+        state.fileName = cleanBaseName.replace(/\.[^/.]+$/, '');
+        state.fullWidth = w;
+        state.fullHeight = h;
+
+        // Store full resolution copy in offscreen buffer
+        state.sourceFullCanvas.width = w;
+        state.sourceFullCanvas.height = h;
+        const fullCtx = state.sourceFullCanvas.getContext('2d');
+        fullCtx.clearRect(0, 0, w, h);
+        fullCtx.drawImage(imgElement, 0, 0, w, h);
+
+        // Update UI Visibility
+        els.dropZone.classList.add('hidden');
+        els.canvasStage.classList.remove('hidden');
+        els.canvasStage.classList.add('flex');
+        els.viewportToolbar.classList.remove('hidden');
+        els.viewportToolbar.classList.add('flex');
+        els.wipeMemoryBtn.classList.remove('hidden');
+        els.downloadBtn.disabled = false;
+
+        resetZoom();
+        rebuildPreviewBuffers();
+      }
+
+      function handleFileUpload(file) {
+        if (!file || !file.type.startsWith('image/')) {
+          showToast('Please select a valid image file (JPEG, PNG, WebP).');
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const img = new Image();
+          img.onload = () => {
+            loadImageFromSource(img, file.name);
+            showToast('Loaded locally into browser RAM');
+          };
+          img.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+      }
+
+      // Procedural Low-Res Sample Scene (640x425 so 2x HD Upscale & Denoise shine immediately!)
+      function generateSampleStudioPhoto() {
+        const w = 640;
+        const h = 425;
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = w;
+        tempCanvas.height = h;
+        const ctx = tempCanvas.getContext('2d');
+
+        // 1. Twilight atmospheric sky gradient
+        const skyGrad = ctx.createLinearGradient(0, 0, 0, h * 0.68);
+        skyGrad.addColorStop(0, '#2c3545');
+        skyGrad.addColorStop(0.45, '#596578');
+        skyGrad.addColorStop(0.82, '#b89f8d');
+        skyGrad.addColorStop(1, '#d8c3b0');
+        ctx.fillStyle = skyGrad;
+        ctx.fillRect(0, 0, w, h);
+
+        // 2. Soft low-horizon sun glow
+        const sunGrad = ctx.createRadialGradient(w * 0.68, h * 0.52, 6, w * 0.68, h * 0.52, 175);
+        sunGrad.addColorStop(0, 'rgba(255, 244, 224, 0.85)');
+        sunGrad.addColorStop(0.35, 'rgba(242, 198, 155, 0.35)');
+        sunGrad.addColorStop(1, 'rgba(242, 198, 155, 0)');
+        ctx.fillStyle = sunGrad;
+        ctx.fillRect(0, 0, w, h);
+
+        // 3. Distant layered mountain ridges
+        const drawRidge = (baseY, amp, freq, color, seed) => {
+          ctx.fillStyle = color;
+          ctx.beginPath();
+          ctx.moveTo(0, h);
+          for (let x = 0; x <= w; x += 4) {
+            const n = Math.sin(x * freq + seed) * amp + Math.cos(x * freq * 2.3 - seed) * (amp * 0.45);
+            ctx.lineTo(x, baseY + n);
+          }
+          ctx.lineTo(w, h);
+          ctx.closePath();
+          ctx.fill();
+        };
+
+        drawRidge(h * 0.55, 24, 0.009, '#465061', 1.2);
+        drawRidge(h * 0.62, 18, 0.013, '#323a47', 3.7);
+
+        // 4. Reflective alpine lake
+        const lakeGrad = ctx.createLinearGradient(0, h * 0.64, 0, h);
+        lakeGrad.addColorStop(0, '#4c5766');
+        lakeGrad.addColorStop(0.5, '#2b323d');
+        lakeGrad.addColorStop(1, '#1a1f26');
+        ctx.fillStyle = lakeGrad;
+        ctx.fillRect(0, h * 0.64, w, h * 0.36);
+
+        // Water shimmer ripples
+        ctx.strokeStyle = 'rgba(255, 235, 210, 0.16)';
+        ctx.lineWidth = 1.2;
+        for (let i = 0; i < 32; i++) {
+          const ry = h * 0.65 + (i * i * 0.14);
+          if (ry > h) break;
+          const rw = 22 + (i * 5);
+          const rx = w * 0.68 - rw / 2 + Math.sin(i * 1.7) * 18;
+          ctx.beginPath();
+          ctx.moveTo(rx, ry);
+          ctx.lineTo(rx + rw, ry);
+          ctx.stroke();
+        }
+
+        // 5. Foreground crisp pine silhouettes & architectural pier
+        ctx.fillStyle = '#181c22';
+        for (let i = 0; i < 24; i++) {
+          const tx = (i / 24) * w * 0.55;
+          const th = 45 + (i % 5) * 14;
+          const ty = h * 0.66;
+          ctx.beginPath();
+          ctx.moveTo(tx, ty - th);
+          ctx.lineTo(tx - 9, ty + 8);
+          ctx.lineTo(tx + 9, ty + 8);
+          ctx.closePath();
+          ctx.fill();
+        }
+
+        // Wooden dock with fine planks
+        ctx.fillStyle = '#232021';
+        ctx.beginPath();
+        ctx.moveTo(w * 0.18, h);
+        ctx.lineTo(w * 0.36, h * 0.74);
+        ctx.lineTo(w * 0.41, h * 0.74);
+        ctx.lineTo(w * 0.34, h);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.14)';
+        ctx.lineWidth = 1;
+        for (let p = 0; p < 16; p++) {
+          const t = p / 16;
+          const y = h * 0.74 + t * (h * 0.26);
+          const x1 = w * 0.36 - t * (w * 0.18);
+          const x2 = w * 0.41 - t * (w * 0.07);
+          ctx.beginPath();
+          ctx.moveTo(x1, y);
+          ctx.lineTo(x2, y);
+          ctx.stroke();
+        }
+
+        // Add subtle sensor grain so Denoise + 2x HD Upscale effects are clearly visible
+        const imgData = ctx.getImageData(0, 0, w, h);
+        const d = imgData.data;
+        for (let i = 0; i < d.length; i += 4) {
+          const grain = (((i * 2654435761) >>> 24) - 128) * 0.07;
+          d[i] += grain;
+          d[i + 1] += grain;
+          d[i + 2] += grain;
+        }
+        ctx.putImageData(imgData, 0, 0);
+
+        loadImageFromSource(tempCanvas, 'kaerys-sample-640px');
+        showToast('Loaded 640×425 sample — toggle 2x HD Upscale to test!');
+      }
+
+      // ==========================================
+      // 5. CORE PIXEL, BILATERAL DENOISE & EDGE RECONSTRUCTION ENGINE
+      // ==========================================
+      function processImageData(sourceImageData, params, upscaleFactor = 1) {
+        const width = sourceImageData.width;
+        const height = sourceImageData.height;
+        const src = sourceImageData.data;
+        const output = new ImageData(width, height);
+        const dst = output.data;
+
+        // Precompute adjustment multipliers
+        const exposureFactor = Math.pow(2, params.exposure / 65);
+        const contrastVal = (params.contrast / 100) * 1.25;
+        const contrastFactor = (1 + contrastVal);
+        const shadowLift = params.shadows / 100;
+        const warmthShift = params.warmth * 0.45;
+        const satMult = 1 + (params.saturation / 100);
+        const vibMult = params.vibrance / 100;
+
+        // Pass 1: Tone, Exposure, Highlights/Shadows, Warmth, Vibrance, Saturation
+        for (let i = 0; i < src.length; i += 4) {
+          let r = src[i];
+          let g = src[i + 1];
+          let b = src[i + 2];
+          const a = src[i + 3];
+
+          // Exposure
+          r *= exposureFactor;
+          g *= exposureFactor;
+          b *= exposureFactor;
+
+          // Highlights / Shadows Recovery
+          if (shadowLift !== 0) {
+            const lum = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+            if (shadowLift > 0) {
+              // Lift deep shadows while protecting bright highlights
+              const shadowMask = Math.pow(1 - Math.min(1, Math.max(0, lum)), 2.2);
+              const liftAmount = shadowLift * shadowMask * 95;
+              r += liftAmount;
+              g += liftAmount;
+              b += liftAmount;
+            } else {
+              // Recover blown highlights & deepen blacks
+              const highlightMask = Math.pow(Math.min(1, Math.max(0, lum)), 1.8);
+              const pullAmount = shadowLift * highlightMask * 95;
+              r += pullAmount;
+              g += pullAmount;
+              b += pullAmount;
+            }
+          }
+
+          // Contrast around perceptual midpoint (128)
+          r = (r - 128) * contrastFactor + 128;
+          g = (g - 128) * contrastFactor + 128;
+          b = (b - 128) * contrastFactor + 128;
+
+          // Warmth
+          r += warmthShift;
+          b -= warmthShift;
+
+          // Smart Vibrance
+          if (vibMult !== 0) {
+            const maxC = Math.max(r, g, b);
+            const minC = Math.min(r, g, b);
+            const currentSat = maxC > 0 ? (maxC - minC) / maxC : 0;
+            const vibScale = 1 + vibMult * (1 - currentSat) * 1.35;
+            const avg = (r + g + b) / 3;
+            r = avg + (r - avg) * vibScale;
+            g = avg + (g - avg) * vibScale;
+            b = avg + (b - avg) * vibScale;
+          }
+
+          // Saturation
+          if (satMult !== 1) {
+            const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+            r = luma + (r - luma) * satMult;
+            g = luma + (g - luma) * satMult;
+            b = luma + (b - luma) * satMult;
+          }
+
+          dst[i] = r < 0 ? 0 : r > 255 ? 255 : r;
+          dst[i + 1] = g < 0 ? 0 : g > 255 ? 255 : g;
+          dst[i + 2] = b < 0 ? 0 : b > 255 ? 255 : b;
+          dst[i + 3] = a;
+        }
+
+        // Pass 2: Smart Bilateral-Style Edge-Preserving Denoise
+        // Smooths flat noisy regions while locking onto high-gradient edges
+        const effectiveDenoise = params.denoise + (upscaleFactor === 2 ? 12 : 0);
+        if (effectiveDenoise > 0) {
+          const strength = Math.min(1, effectiveDenoise / 100);
+          const colorThreshold = 14 + strength * 42; // Edge stop threshold
+          const copy = new Uint8ClampedArray(dst);
+          const rowStride = width * 4;
+
+          for (let y = 1; y < height - 1; y++) {
+            const rowOffset = y * rowStride;
+            for (let x = 1; x < width - 1; x++) {
+              const idx = rowOffset + x * 4;
+              const cr = copy[idx];
+              const cg = copy[idx + 1];
+              const cb = copy[idx + 2];
+
+              let sumR = cr * 2;
+              let sumG = cg * 2;
+              let sumB = cb * 2;
+              let totalWeight = 2;
+
+              // 4-connected cardinal neighbors for fast edge-aware bilateral blend
+              const offsets = [-rowStride, rowStride, -4, 4];
+              for (let k = 0; k < 4; k++) {
+                const nIdx = idx + offsets[k];
+                const nr = copy[nIdx];
+                const ng = copy[nIdx + 1];
+                const nb = copy[nIdx + 2];
+                const diff = Math.abs(cr - nr) + Math.abs(cg - ng) + Math.abs(cb - nb);
+
+                if (diff < colorThreshold * 3) {
+                  const w = (1 - diff / (colorThreshold * 3)) * strength * 1.4;
+                  sumR += nr * w;
+                  sumG += ng * w;
+                  sumB += nb * w;
+                  totalWeight += w;
+                }
+              }
+
+              dst[idx] = sumR / totalWeight;
+              dst[idx + 1] = sumG / totalWeight;
+              dst[idx + 2] = sumB / totalWeight;
+            }
+          }
+        }
+
+        // Pass 3: Adaptive Edge-Directed Unsharp Mask & 3x3 Convolution Sharpening
+        // Automatically engages micro-contrast edge reconstruction when 2x HD Upscale is active
+        const baseSharpen = params.sharpen;
+        const upscaleBoost = upscaleFactor === 2 ? 32 : 0;
+        const totalSharpen = Math.min(135, baseSharpen + upscaleBoost);
+
+        if (totalSharpen > 0) {
+          const amount = (totalSharpen / 100) * 1.35;
+          const copy = new Uint8ClampedArray(dst);
+          const rowStride = width * 4;
+
+          for (let y = 1; y < height - 1; y++) {
+            const rowOffset = y * rowStride;
+            for (let x = 1; x < width - 1; x++) {
+              const idx = rowOffset + x * 4;
+              for (let c = 0; c < 3; c++) {
+                const center = copy[idx + c];
+                const neighbors =
+                  copy[idx - rowStride + c] +
+                  copy[idx + rowStride + c] +
+                  copy[idx - 4 + c] +
+                  copy[idx + 4 + c];
+
+                const detail = center - neighbors * 0.25;
+                // Suppress amplifying tiny noise speckles (< 2.5 luma) when upscaling
+                const edgeWeight = Math.abs(detail) < 2.2 && upscaleFactor === 2 ? 0.35 : 1.0;
+                const sharpened = center + amount * detail * edgeWeight;
+                dst[idx + c] = sharpened < 0 ? 0 : sharpened > 255 ? 255 : sharpened;
+              }
+            }
+          }
+        }
+
+        return output;
+      }
+
+      // Render Frame Scheduler (60fps throttled via requestAnimationFrame)
+      function requestRender() {
+        if (!state.hasImage || state.renderPending) return;
+        state.renderPending = true;
+        requestAnimationFrame(() => {
+          const t0 = performance.now();
+          const processed = processImageData(state.previewOriginalData, state.params, state.upscaleFactor);
+          enhancedCtx.putImageData(processed, 0, 0);
+          const dt = (performance.now() - t0).toFixed(1);
+          els.processingTimeBadge.textContent = `${dt} ms`;
+          state.renderPending = false;
+        });
+      }
+
+      // ==========================================
+      // 8. UPSCALE, SLIDER & PRESET BINDINGS
+      // ==========================================
+      document.querySelectorAll('.upscale-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const scale = parseInt(btn.dataset.scale, 10);
+          if (state.upscaleFactor === scale) return;
+
+          state.upscaleFactor = scale;
+          document.querySelectorAll('.upscale-btn').forEach(b => {
+            b.classList.remove('bg-white/10', 'text-white');
+            b.classList.add('text-zinc-400');
+          });
+          btn.classList.add('bg-white/10', 'text-white');
+          btn.classList.remove('text-zinc-400');
+
+          if (state.hasImage) {
+            rebuildPreviewBuffers();
+            showToast(scale === 2 ? '2x HD Upscale & Edge Reconstruction enabled' : 'Switched to 1x Original resolution');
+          } else {
+            els.upscaleStatusBadge.textContent = scale === 2 ? '2x HD Staged' : '1x Native';
+          }
+        });
+      });
+
+      const sliderGroups = document.querySelectorAll('.slider-group');
+
+      function syncSlidersToState() {
+        sliderGroups.forEach(group => {
+          const key = group.dataset.key;
+          const input = group.querySelector('input[type="range"]');
+          const display = group.querySelector('.value-display');
+          const val = state.params[key];
+          input.value = val;
+          display.textContent = val > 0 ? `+${val}` : val;
+        });
+      }
+
+      sliderGroups.forEach(group => {
+        const key = group.dataset.key;
+        const input = group.querySelector('input[type="range"]');
+        const label = group.querySelector('label');
+        const display = group.querySelector('.value-display');
+
+        input.addEventListener('input', () => {
+          const val = parseInt(input.value, 10);
+          state.params[key] = val;
+          display.textContent = val > 0 ? `+${val}` : val;
+          els.activePresetLabel.textContent = 'Custom';
+          requestRender();
+        });
+
+        input.addEventListener('change', estimateExportSize);
+
+        // Double-click label resets that individual parameter
+        label.addEventListener('dblclick', () => {
+          state.params[key] = DEFAULT_PARAMS[key];
+          syncSlidersToState();
+          requestRender();
+          estimateExportSize();
+        });
+      });
+
+      // Preset Buttons
+      document.querySelectorAll('.preset-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const presetKey = btn.dataset.preset;
+          if (!PRESETS[presetKey]) return;
+          state.params = { ...PRESETS[presetKey] };
+          syncSlidersToState();
+          els.activePresetLabel.textContent = btn.textContent.trim();
+          requestRender();
+          estimateExportSize();
+          if (!state.hasImage) {
+            showToast(`Preset "${btn.textContent.trim()}" staged — load a photo to view`);
+          }
+        });
+      });
+
+      // Reset All
+      els.resetAllBtn.addEventListener('click', () => {
+        state.params = { ...DEFAULT_PARAMS };
+        syncSlidersToState();
+        els.activePresetLabel.textContent = 'Original';
+        requestRender();
+        estimateExportSize();
+      });
+
+      // ==========================================
+      // 9. EXPORT (FULL-RES + 2X HD + EXIF STRIPPING) & MEMORY WIPE
+      // ==========================================
+      document.querySelectorAll('.format-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.format-btn').forEach(b => {
+            b.classList.remove('bg-white/10', 'text-white', 'font-medium');
+            b.classList.add('text-zinc-400');
+          });
+          btn.classList.add('bg-white/10', 'text-white', 'font-medium');
+          btn.classList.remove('text-zinc-400');
+
+          state.exportFormat = btn.dataset.format;
+          if (state.exportFormat === 'image/png') {
+            els.qualityControlRow.classList.add('opacity-40', 'pointer-events-none');
+          } else {
+            els.qualityControlRow.classList.remove('opacity-40', 'pointer-events-none');
+          }
+          estimateExportSize();
+        });
+      });
+
+      els.exportQualitySlider.addEventListener('input', () => {
+        const q = parseInt(els.exportQualitySlider.value, 10);
+        state.exportQuality = q / 100;
+        els.exportQualityLabel.textContent = `${q}%`;
+      });
+
+      els.exportQualitySlider.addEventListener('change', estimateExportSize);
+
+      function estimateExportSize() {
+        if (!state.hasImage) {
+          els.estFileSize.textContent = '—';
+          return;
+        }
+        const targetW = state.fullWidth * state.upscaleFactor;
+        const targetH = state.fullHeight * state.upscaleFactor;
+        els.enhancedCanvas.toBlob((blob) => {
+          if (!blob) return;
+          const areaRatio = (targetW * targetH) / (state.previewWidth * state.previewHeight);
+          const estimatedBytes = blob.size * areaRatio;
+          els.estFileSize.textContent = `~${formatBytes(estimatedBytes)}`;
+        }, state.exportFormat, state.exportQuality);
+      }
+
+      els.downloadBtn.addEventListener('click', () => {
+        if (!state.hasImage) return;
+
+        els.downloadBtn.disabled = true;
+        const originalBtnHTML = els.downloadBtn.innerHTML;
+        els.downloadBtn.innerHTML = `<span>Rendering ${state.upscaleFactor === 2 ? '2x HD' : 'Full-Res'} Clean Pixels...</span>`;
+
+        setTimeout(() => {
+          try {
+            const targetW = state.fullWidth * state.upscaleFactor;
+            const targetH = state.fullHeight * state.upscaleFactor;
+
+            // Step 1: Build full-resolution base (1x or 2x progressive bicubic canvas)
+            const baseExportCanvas = state.upscaleFactor === 2
+              ? buildUpscaledCanvas(state.sourceFullCanvas, targetW, targetH)
+              : state.sourceFullCanvas;
+
+            const baseCtx = baseExportCanvas.getContext('2d');
+            const fullSrcData = baseCtx.getImageData(0, 0, targetW, targetH);
+
+            // Step 2: Run full-resolution tone, bilateral denoise & edge-directed reconstruction
+            const fullProcessedData = processImageData(fullSrcData, state.params, state.upscaleFactor);
+
+            // Step 3: Write onto a clean export canvas (strips all EXIF/GPS metadata)
+            const exportCanvas = document.createElement('canvas');
+            exportCanvas.width = targetW;
+            exportCanvas.height = targetH;
+            const exportCtx = exportCanvas.getContext('2d');
+            exportCtx.putImageData(fullProcessedData, 0, 0);
+
+            const ext = state.exportFormat.split('/')[1];
+            const suffix = state.upscaleFactor === 2 ? '-kaerys-2xHD' : '-kaerys';
+            exportCanvas.toBlob((blob) => {
+              const url = URL.createObjectURL(blob);
+              const link = document.createElement('a');
+              link.download = `${state.fileName}${suffix}.${ext}`;
+              link.href = url;
+              document.body.appendChild(link);
+              link.click();
+              document.body.removeChild(link);
+
+              setTimeout(() => URL.revokeObjectURL(url), 1000);
+              exportCanvas.width = 0;
+              exportCanvas.height = 0;
+              if (state.upscaleFactor === 2) {
+                baseExportCanvas.width = 0;
+                baseExportCanvas.height = 0;
+              }
+
+              els.downloadBtn.disabled = false;
+              els.downloadBtn.innerHTML = originalBtnHTML;
+              showToast(`Exported ${targetW}×${targetH} ${ext.toUpperCase()} (EXIF stripped)`);
+            }, state.exportFormat, state.exportQuality);
+          } catch (err) {
+            console.error(err);
+            els.downloadBtn.disabled = false;
+            els.downloadBtn.innerHTML = originalBtnHTML;
+            showToast('Export error — image resolution may exceed browser memory');
+          }
+        }, 30);
+      });
+
+      // Purge & Wipe RAM Button
+      els.wipeMemoryBtn.addEventListener('click', () => {
+        state.hasImage = false;
+        state.previewOriginalData = null;
+        state.fullWidth = 0;
+        state.fullHeight = 0;
+
+        // Zero out all canvas dimensions to release GPU/RAM textures
+        state.sourceFullCanvas.width = 0;
+        state.sourceFullCanvas.height = 0;
+        els.enhancedCanvas.width = 0;
+        els.enhancedCanvas.height = 0;
+        els.originalCanvas.width = 0;
+        els.originalCanvas.height = 0;
+
+        els.fileInputTop.value = '';
+        els.fileInputMain.value = '';
+        els.estFileSize.textContent = '—';
+
+        els.canvasStage.classList.add('hidden');
+        els.canvasStage.classList.remove('flex');
+        els.viewportToolbar.classList.add('hidden');
+        els.viewportToolbar.classList.remove('flex');
+        els.wipeMemoryBtn.classList.add('hidden');
+        els.dropZone.classList.remove('hidden');
+        els.downloadBtn.disabled = true;
+
+        showToast('All image buffers wiped from browser memory');
+      });
+
+      // ==========================================
+      // 10. DRAG & DROP + FILE INPUT + MODAL EVENTS
+      // ==========================================
+      els.fileInputTop.addEventListener('change', (e) => handleFileUpload(e.target.files[0]));
+      els.fileInputMain.addEventListener('change', (e) => handleFileUpload(e.target.files[0]));
+      els.loadSampleBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        generateSampleStudioPhoto();
+      });
+
+      // Clicking empty dropzone triggers file picker
+      els.dropZone.addEventListener('click', (e) => {
+        if (e.target.closest('button') || e.target.closest('label')) return;
+        els.fileInputMain.click();
+      });
+
+      // Global Drag & Drop Support
+      let dragCounter = 0;
+      window.addEventListener('dragenter', (e) => {
+        e.preventDefault();
+        dragCounter++;
+        els.dragOverlay.classList.remove('hidden');
+      });
+
+      window.addEventListener('dragleave', (e) => {
+        e.preventDefault();
+        dragCounter--;
+        if (dragCounter <= 0) {
+          dragCounter = 0;
+        loadImageFromSource(tempCanvas, 'kaerys-sample-640px');
+        showToast('Loaded 640×425 sample — toggle 2x HD Upscale to test!');
+      }
+      });
+
+      window.addEventListener('dragover', (e) => e.preventDefault());
+
+      window.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dragCounter = 0;
+        els.dragOverlay.classList.add('hidden');
+        if (e.dataTransfer && e.dataTransfer.files.length > 0) {
+          handleFileUpload(e.dataTransfer.files[0]);
+        }
+      });
+
+      // Privacy Modal Toggle
+      els.privacyBadgeBtn.addEventListener('click', () => els.privacyModal.classList.remove('hidden'));
+      els.closePrivacyModal.addEventListener('click', () => els.privacyModal.classList.add('hidden'));
+      els.ackPrivacyModal.addEventListener('click', () => els.privacyModal.classList.add('hidden'));
+      els.privacyModal.addEventListener('click', (e) => {
+        if (e.target === els.privacyModal) els.privacyModal.classList.add('hidden');
+      });
+    })();
+  </script>
+</body>
+</html>
